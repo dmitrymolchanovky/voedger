@@ -108,12 +108,12 @@ services:
 	}
 	expectedNewState := dockerContainerInfoList{
 		{
-			Name:  "my-redis-1",
+			Name:  "my_redis_1",
 			Image: "redis:7.0.11-alpine",
 			IsUp:  true,
 		},
 		{
-			Name:  "my-nginx-1",
+			Name:  "my_nginx_1",
 			Image: "nginx:1.23.4",
 			IsUp:  true,
 		},
@@ -152,7 +152,7 @@ services:
 
 	expectedNewState := dockerContainerInfoList{
 		{
-			Name:  "my-redis-1",
+			Name:  "my_redis_1",
 			Image: "redis:7.0.4-alpine",
 			IsUp:  true,
 		},
@@ -211,12 +211,12 @@ services:
 
 	expectedNewState = dockerContainerInfoList{
 		{
-			Name:  "my-redis-1",
+			Name:  "my_redis_1",
 			Image: "redis:7.0.11-alpine",
 			IsUp:  true,
 		},
 		{
-			Name:  "my-nginx-1",
+			Name:  "my_nginx_1",
 			Image: "nginx:1.23.4",
 			IsUp:  true,
 		},
