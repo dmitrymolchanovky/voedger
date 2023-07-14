@@ -128,7 +128,8 @@ func deploySeSwarm(cluster *clusterType) error {
 
 	// Init swarm mode
 	node := cluster.Nodes[idxSENode1]
-	manager := node.ActualNodeState.Address
+	//	manager := node.ActualNodeState.Address
+	manager := node.nodeName()
 
 	if err = prepareScripts("docker-compose-template.yml", "scylla.yaml", "swarm-init.sh", "swarm-set-label.sh", "db-node-prepare.sh"); err != nil {
 		return err
@@ -174,14 +175,16 @@ func deploySeSwarm(cluster *clusterType) error {
 
 	for i := 0; i < len(cluster.Nodes); i++ {
 
-		if cluster.Nodes[i].ActualNodeState.Address == manager {
+		//		if cluster.Nodes[i].ActualNodeState.Address == manager {
+		if cluster.Nodes[i].nodeName() == manager {
 			continue
 		}
 
 		func(n *nodeType) {
 			logger.Info("swarm add node on ", n.ActualNodeState.Address)
 			if e := newScriptExecuter(cluster.sshKey, node.ActualNodeState.Address).
-				run("swarm-add-node.sh", manager, n.ActualNodeState.Address); e != nil {
+				//				run("swarm-add-node.sh", manager, n.ActualNodeState.Address); e != nil {
+				run("swarm-add-node.sh", manager, n.nodeName()); e != nil {
 				logger.Error(e.Error())
 				n.Error = e.Error()
 				return
@@ -189,7 +192,8 @@ func deploySeSwarm(cluster *clusterType) error {
 
 			logger.Info("swarm set label on", n.ActualNodeState.Address, n.label(swarmDbmsLabelKey))
 			if e := newScriptExecuter(cluster.sshKey, n.ActualNodeState.Address).
-				run("swarm-set-label.sh", manager, n.ActualNodeState.Address, n.label(swarmDbmsLabelKey), "true"); e != nil {
+				//run("swarm-set-label.sh", manager, n.ActualNodeState.Address, n.label(swarmDbmsLabelKey), "true"); e != nil {
+				run("swarm-set-label.sh", manager, n.nodeName(), n.label(swarmDbmsLabelKey), "true"); e != nil {
 				logger.Error(e.Error())
 				n.Error = e.Error()
 				return
@@ -197,7 +201,8 @@ func deploySeSwarm(cluster *clusterType) error {
 
 			logger.Info("db node prepare ", n.ActualNodeState.Address)
 			if e := newScriptExecuter(cluster.sshKey, n.ActualNodeState.Address).
-				run("db-node-prepare.sh", n.ActualNodeState.Address); e != nil {
+				//				run("db-node-prepare.sh", n.ActualNodeState.Address); e != nil {
+				run("db-node-prepare.sh", n.nodeName()); e != nil {
 				logger.Error(e.Error())
 				n.Error = e.Error()
 				return
@@ -222,17 +227,20 @@ func deploySeDockerStack(cluster *clusterType) error {
 	conf := newSeConfigType(cluster)
 
 	if err := newScriptExecuter(cluster.sshKey, conf.AppNode1).
-		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode1, cluster.nodeByHost(conf.AppNode1).label(swarmAppLabelKey), "true"); err != nil {
+		//		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode1, cluster.nodeByHost(conf.AppNode1).label(swarmAppLabelKey), "true"); err != nil {
+		run("swarm-set-label.sh", conf.AppNode1Name, conf.AppNode1Name, cluster.nodeByHost(conf.AppNode1).label(swarmAppLabelKey), "true"); err != nil {
 		return err
 	}
 
 	if err := newScriptExecuter(cluster.sshKey, conf.AppNode2).
-		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode2, cluster.nodeByHost(conf.AppNode2).label(swarmAppLabelKey), "true"); err != nil {
+		//		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode2, cluster.nodeByHost(conf.AppNode2).label(swarmAppLabelKey), "true"); err != nil {
+		run("swarm-set-label.sh", conf.AppNode1Name, conf.AppNode2Name, cluster.nodeByHost(conf.AppNode2).label(swarmAppLabelKey), "true"); err != nil {
 		return err
 	}
 
 	if err := newScriptExecuter(cluster.sshKey, fmt.Sprintf("%s %s", conf.AppNode1, conf.AppNode2)).
-		run("se-cluster-start.sh", conf.AppNode1, conf.AppNode2); err != nil {
+		//		run("se-cluster-start.sh", conf.AppNode1, conf.AppNode2); err != nil {
+		run("se-cluster-start.sh", conf.AppNode1Name, conf.AppNode2Name); err != nil {
 		return err
 	}
 
@@ -251,7 +259,8 @@ func deployDbmsDockerStack(cluster *clusterType) error {
 	conf := newSeConfigType(cluster)
 	logger.Info("db cluster start on", conf.DBNode1, conf.DBNode2, conf.DBNode3)
 	if err := newScriptExecuter(cluster.sshKey, fmt.Sprintf("%s %s %s", conf.DBNode1, conf.DBNode2, conf.DBNode3)).
-		run("db-cluster-start.sh", conf.DBNode1, conf.DBNode2, conf.DBNode3); err != nil {
+		//		run("db-cluster-start.sh", conf.DBNode1, conf.DBNode2, conf.DBNode3); err != nil {
+		run("db-cluster-start.sh", conf.DBNode1Name, conf.DBNode2Name, conf.DBNode3Name); err != nil {
 		return err
 	}
 
@@ -276,22 +285,26 @@ func deployMonDockerStack(cluster *clusterType) error {
 	conf := newSeConfigType(cluster)
 
 	if err := newScriptExecuter(cluster.sshKey, conf.AppNode1).
-		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode1, cluster.nodeByHost(conf.AppNode1).label(swarmMonLabelKey), "true"); err != nil {
+		//		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode1, cluster.nodeByHost(conf.AppNode1).label(swarmMonLabelKey), "true"); err != nil {
+		run("swarm-set-label.sh", conf.AppNode1Name, conf.AppNode1Name, cluster.nodeByHost(conf.AppNode1).label(swarmMonLabelKey), "true"); err != nil {
 		return err
 	}
 
 	if err := newScriptExecuter(cluster.sshKey, conf.AppNode2).
-		run("swarm-set-label.sh", conf.AppNode1, conf.AppNode2, cluster.nodeByHost(conf.AppNode2).label(swarmMonLabelKey), "true"); err != nil {
+		//run("swarm-set-label.sh", conf.AppNode1, conf.AppNode2, cluster.nodeByHost(conf.AppNode2).label(swarmMonLabelKey), "true"); err != nil {
+		run("swarm-set-label.sh", conf.AppNode1Name, conf.AppNode2Name, cluster.nodeByHost(conf.AppNode2).label(swarmMonLabelKey), "true"); err != nil {
 		return err
 	}
 
 	if err := newScriptExecuter(cluster.sshKey, fmt.Sprintf("%s %s", conf.AppNode1, conf.AppNode2)).
-		run("mon-node-prepare.sh", conf.AppNode1, conf.AppNode2, conf.DBNode1, conf.DBNode2, conf.DBNode3); err != nil {
+		//		run("mon-node-prepare.sh", conf.AppNode1, conf.AppNode2, conf.DBNode1, conf.DBNode2, conf.DBNode3); err != nil {
+		run("mon-node-prepare.sh", conf.AppNode1Name, conf.AppNode2Name, conf.DBNode1Name, conf.DBNode2Name, conf.DBNode3Name); err != nil {
 		return err
 	}
 
 	if err := newScriptExecuter(cluster.sshKey, fmt.Sprintf("%s %s", conf.AppNode1, conf.AppNode2)).
-		run("mon-stack-start.sh", conf.AppNode1, conf.AppNode2); err != nil {
+		//		run("mon-stack-start.sh", conf.AppNode1, conf.AppNode2); err != nil {
+		run("mon-stack-start.sh", conf.AppNode1Name, conf.AppNode2Name); err != nil {
 		return err
 	}
 
@@ -300,12 +313,17 @@ func deployMonDockerStack(cluster *clusterType) error {
 }
 
 type seConfigType struct {
-	StackName string
-	AppNode1  string
-	AppNode2  string
-	DBNode1   string
-	DBNode2   string
-	DBNode3   string
+	StackName    string
+	AppNode1     string
+	AppNode2     string
+	DBNode1      string
+	DBNode2      string
+	DBNode3      string
+	AppNode1Name string
+	AppNode2Name string
+	DBNode1Name  string
+	DBNode2Name  string
+	DBNode3Name  string
 }
 
 func newSeConfigType(cluster *clusterType) *seConfigType {
@@ -319,6 +337,11 @@ func newSeConfigType(cluster *clusterType) *seConfigType {
 		config.DBNode1 = cluster.Nodes[idxDBNode1].ActualNodeState.Address
 		config.DBNode2 = cluster.Nodes[idxDBNode2].ActualNodeState.Address
 		config.DBNode3 = cluster.Nodes[idxDBNode3].ActualNodeState.Address
+		config.AppNode1Name = cluster.Nodes[idxSENode1].nodeName()
+		config.AppNode2Name = cluster.Nodes[idxSENode2].nodeName()
+		config.DBNode1Name = cluster.Nodes[idxDBNode1].nodeName()
+		config.DBNode2Name = cluster.Nodes[idxDBNode2].nodeName()
+		config.DBNode3Name = cluster.Nodes[idxDBNode3].nodeName()
 	}
 	return &config
 }
@@ -331,7 +354,8 @@ func deployDocker(node *nodeType) error {
 	logger.Info(fmt.Sprintf("deploy docker on a %s host...", node.DesiredNodeState.Address))
 
 	if err = newScriptExecuter(node.cluster.sshKey, node.DesiredNodeState.Address).
-		run("docker-install.sh", node.DesiredNodeState.Address); err != nil {
+		//		run("docker-install.sh", node.DesiredNodeState.Address); err != nil {
+		run("docker-install.sh", node.nodeName()); err != nil {
 		logger.Error(err.Error())
 		node.Error = err.Error()
 	} else {
