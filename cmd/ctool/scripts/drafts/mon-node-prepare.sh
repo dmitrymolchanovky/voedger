@@ -104,6 +104,7 @@ EOF
       sed "s/{{.DBNode1}}/${hosts[2]}/g; s/{{.DBNode2}}/${hosts[3]}/g; s/{{.DBNode3}}/${hosts[4]}/g; s/{{.AppNode1}}/${hosts[0]}/g; s/{{.AppNode2}}/${hosts[1]}/g; s/{{.Label}}/AppNode$((count+1))/g" \
       | utils_ssh "$SSH_USER@$1" 'cat > ~/prometheus/prometheus.yml'
 
+  cat ./prometheus/web.yml | utils_ssh "$SSH_USER@$1" 'cat > ~/prometheus/web.yml'
   cat ./prometheus/alert.rules | utils_ssh "$SSH_USER@$1" 'cat > ~/prometheus/alert.rules'
   cat ./alertmanager/config.yml | utils_ssh "$SSH_USER@$1" 'cat > ~/alertmanager/config.yml'
 
