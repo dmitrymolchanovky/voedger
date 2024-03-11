@@ -132,15 +132,45 @@ func seNodeValidate(n *nodeType) error {
 	return nil
 }
 
+func setRandomAdminPasswordsForMonStack(cluster *clusterType) error {
+	var err error
+	if err = setGrafanaAdminPassword(cluster, randomPassword(minGrafanaPasswordLength)); err != nil {
+		return err
+	}
+	loggerInfo("The password for the 'admin' user in Grafana is dropped. Run the 'ctool grafana admin-password <password>' command to set a new password for 'admin'.")
+
+	if err = setPrometheusAdminPassword(cluster, randomPassword(minPrometheusPasswordLength), []string{"app-node-1", "app-node-2"}); err != nil {
+		return err
+	}
+	loggerInfo("The password for the 'admin' user in Prometheus is dropped. Run the 'ctool prometheus admin-password <password>' command to set a new password for 'admin'.")
+
+	return nil
+}
+
 func seClusterControllerFunction(c *clusterType) error {
 
 	var err error
 
 	switch c.Cmd.Kind {
 	case ckInit, ckUpgrade:
-		err = initSeCluster(c)
-		if err == nil && len(c.Cron.Backup) > 0 {
-			err = setCronBackup(c, c.Cron.Backup)
+		if err = initSeCluster(c); err != nil {
+			return err
+		}
+
+		if len(c.Cron.Backup) > 0 {
+			if err = setCronBackup(c, c.Cron.Backup); err != nil {
+				return err
+			}
+		}
+
+		if c.Cmd.Kind == ckInit {
+			loggerInfo("setRandomAdminPasswordsForMonStack")
+			/*
+				if err = setRandomAdminPasswordsForMonStack(c); err != nil {
+					return err
+				}
+			*/
+			loggerInfo("setRandomAdminPasswordsForMonStack", "OK")
 		}
 	case ckReplace:
 		var n *nodeType
@@ -151,7 +181,14 @@ func seClusterControllerFunction(c *clusterType) error {
 		case nrDBNode:
 			err = replaceSeScyllaNode(c)
 		case nrAppNode:
-			err = replaceSeAppNode(c)
+			if err = replaceSeAppNode(c); err != nil {
+				return err
+			}
+			/*
+				if err = setRandomAdminPasswordsForMonStack(c); err != nil {
+					return err
+				}
+			*/
 		}
 		if err == nil && len(c.Cron.Backup) > 0 {
 			err = setCronBackup(c, c.Cron.Backup)
@@ -583,6 +620,12 @@ func replaceSeAppNode(cluster *clusterType) error {
 		liveOldAddr = conf.AppNode1
 	}
 
+	/*
+		liveNodeName := cluster.nodeByHost(liveOldAddr).nodeName()
+		if err = setPrometheusAdminPassword(cluster, "admin", []string{liveNodeName}); err != nil {
+			return err
+		}
+	*/
 	var newNode *nodeType
 	if newNode = cluster.nodeByHost(newAddr); newNode == nil {
 		return fmt.Errorf(ErrHostNotFoundInCluster.Error(), newAddr)
@@ -612,6 +655,11 @@ func replaceSeAppNode(cluster *clusterType) error {
 		return err
 	}
 
+	/*
+		if err = setPrometheusAdminPassword(cluster, "admin", []string{liveNodeName}); err != nil {
+			return err
+		}
+	*/
 	loggerInfo("Copy prometheus data base from", liveOldAddr, "to", newAddr)
 	// nolint
 	if err = newScriptExecuter(cluster.sshKey, fmt.Sprintf("%s, %s", liveOldAddr, newAddr)).

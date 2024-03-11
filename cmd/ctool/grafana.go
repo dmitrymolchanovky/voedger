@@ -45,7 +45,7 @@ func newGrafanaCmd() *cobra.Command {
 
 }
 
-func checkPassword(password string) error {
+func checkGrafanaPassword(password string) error {
 	if len(password) < minGrafanaPasswordLength {
 		return ErrGrafanaPasswordIsTooShort
 	}
@@ -59,15 +59,19 @@ func grafanaAdminPassword(cmd *cobra.Command, args []string) error {
 	}
 
 	password := args[0]
-	if err := checkPassword(password); err != nil {
+	if err := checkGrafanaPassword(password); err != nil {
 		return err
 	}
 
-	if err := newScriptExecuter(cluster.sshKey, "").
-		run("grafana-admin-password.sh", args[0]); err != nil {
+	if err := setGrafanaAdminPassword(cluster, password); err != nil {
 		return err
 	}
 
 	loggerInfoGreen("Password for the admin user in Grafana was successfully changed")
 	return nil
+}
+
+func setGrafanaAdminPassword(cluster *clusterType, password string) error {
+	return newScriptExecuter(cluster.sshKey, "").
+		run("grafana-admin-password.sh", password)
 }
