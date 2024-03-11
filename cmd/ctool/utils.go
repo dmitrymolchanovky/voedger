@@ -203,11 +203,13 @@ func captureStdoutStderr(f func() error) (stdout string, stderr string, err erro
 
 }
 
+// nolint
 func randomPassword(length int) string {
 	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	passwordBytes := make([]byte, length)
 	for i := range passwordBytes {
+		// nolint
 		passwordBytes[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(passwordBytes)

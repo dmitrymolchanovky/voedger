@@ -132,6 +132,7 @@ func seNodeValidate(n *nodeType) error {
 	return nil
 }
 
+// nolint
 func setRandomAdminPasswordsForMonStack(cluster *clusterType) error {
 	var err error
 	if err = setGrafanaAdminPassword(cluster, randomPassword(minGrafanaPasswordLength)); err != nil {
