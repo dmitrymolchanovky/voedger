@@ -43,7 +43,7 @@ type appPartition struct {
 	nextPLogOffset istructs.Offset
 }
 
-// syncActualizerFactory - это фабрика(разделИД), которая возвращает свитч, в бранчах которого по синхронному актуализатору на каждое приложение, внутри каждого - проекторы на каждое приложение
+// syncActualizerFactory is a factory(partitionID) that returns a fork operator with a sync actualizer per each application. Inside of an each actualizer - projectors for each application
 func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeFunc,
 	n10nBroker in10n.IN10nBroker, metrics imetrics.IMetrics, vvm VVMName, authenticator iauthnz.IAuthenticator, authorizer iauthnz.IAuthorizer,
 	secretReader isecrets.ISecretReader) ServiceFactory {
@@ -60,7 +60,7 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 		return pipeline.NewService(func(vvmCtx context.Context) {
 			hsp := newHostStateProvider(vvmCtx, partitionID, secretReader)
 			cmdProc.storeOp = pipeline.NewSyncPipeline(vvmCtx, "store",
-				pipeline.WireFunc("applyRecords", func(ctx context.Context, work interface{}) (err error) {
+				pipeline.WireFunc("applyRecords", func(ctx context.Context, work pipeline.IWorkpiece) (err error) {
 					// sync apply records
 					cmd := work.(*cmdWorkpiece)
 					if err = cmd.appStructs.Records().Apply(cmd.pLogEvent); err != nil {
@@ -71,7 +71,7 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 					// forK: sync projector and PutWLog
 
 					pipeline.ForkBranch(
-						pipeline.NewSyncOp(func(ctx context.Context, work interface{}) (err error) {
+						pipeline.NewSyncOp(func(ctx context.Context, work pipeline.IWorkpiece) (err error) {
 							cmd := work.(*cmdWorkpiece)
 							cmd.syncProjectorsStart = time.Now()
 							err = cmd.appPart.DoSyncActualizer(ctx, work)
@@ -85,7 +85,7 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 						}),
 					),
 
-					pipeline.ForkBranch(pipeline.NewSyncOp(func(ctx context.Context, work interface{}) (err error) {
+					pipeline.ForkBranch(pipeline.NewSyncOp(func(ctx context.Context, work pipeline.IWorkpiece) (err error) {
 						// put WLog
 						cmd := work.(*cmdWorkpiece)
 						if err = cmd.appStructs.Events().PutWlog(cmd.pLogEvent); err != nil {
@@ -133,7 +133,7 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 				pipeline.WireFunc("store", cmdProc.storeOp.DoSync),
 				pipeline.WireFunc("n10n", cmdProc.n10n),
 			)
-			// TODO: сделать потом plogOffset свой по каждому разделу, wlogoffset - свой для каждого wsid
+			// TODO: later make so that each partition has its own plogOffset, wsid has its own wlogOffset
 			defer cmdPipeline.Close()
 			for vvmCtx.Err() == nil {
 				select {
@@ -152,7 +152,7 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 						},
 					}
 					func() { // borrowed application partition should be guaranteed to be freed
-						defer cmd.release()
+						defer cmd.Release()
 						cmd.metrics.increase(CommandsTotal, 1.0)
 						cmdHandlingErr := cmdPipeline.SendSync(cmd)
 						if cmdHandlingErr != nil {
@@ -163,7 +163,6 @@ func ProvideServiceFactory(appParts appparts.IAppPartitions, now coreutils.TimeF
 							logger.Info(fmt.Sprintf("partition %d will be restarted due of an error on writing to Log: %s", cmd.cmdMes.PartitionID(), cmdHandlingErr))
 							delete(cmdProc.appPartitions, cmd.cmdMes.AppQName())
 						}
-						// cmd.release()
 					}()
 					metrics.IncreaseApp(CommandsSeconds, string(vvm), cmdMes.AppQName(), time.Since(start).Seconds())
 				case <-vvmCtx.Done():

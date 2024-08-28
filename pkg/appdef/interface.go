@@ -31,9 +31,10 @@ type IAppDef interface {
 	IWithCommands
 	IWithQueries
 	IWithProjectors
+	IWithJobs
 
 	IWithRoles
-	IWithPrivileges
+	IWithACL
 
 	IWithRates
 	IWithLimits
@@ -58,9 +59,10 @@ type IAppDefBuilder interface {
 	ICommandsBuilder
 	IQueriesBuilder
 	IProjectorsBuilder
+	IJobsBuilder
 
 	IRolesBuilder
-	IPrivilegesBuilder
+	IACLBuilder
 
 	IRatesBuilder
 	ILimitsBuilder

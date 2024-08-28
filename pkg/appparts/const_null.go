@@ -6,12 +6,24 @@
 package appparts
 
 import (
+	"context"
+
 	"github.com/voedger/voedger/pkg/appdef"
 	"github.com/voedger/voedger/pkg/istructs"
 )
 
-type nullActualizers struct{}
+type nullActualizerRunner struct{}
 
-func (nullActualizers) DeployPartition(appdef.AppQName, istructs.PartitionID) error { return nil }
-func (nullActualizers) UndeployPartition(appdef.AppQName, istructs.PartitionID)     {}
-func (nullActualizers) SetAppPartitions(IAppPartitions)                             {}
+func (nullActualizerRunner) NewAndRun(ctx context.Context, _ appdef.AppQName, _ istructs.PartitionID, _ appdef.QName) {
+	<-ctx.Done()
+}
+
+func (nullActualizerRunner) SetAppPartitions(IAppPartitions) {}
+
+type nullSchedulerRunner struct{}
+
+func (nullSchedulerRunner) NewAndRun(ctx context.Context, _ appdef.AppQName, _ istructs.PartitionID, _ int, _ istructs.WSID, _ appdef.QName) {
+	<-ctx.Done()
+}
+
+func (nullSchedulerRunner) SetAppPartitions(IAppPartitions) {}

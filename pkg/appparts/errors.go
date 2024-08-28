@@ -21,6 +21,7 @@ var (
 		fmt.Errorf("%w %s", ErrNotAvailableEngines, ProcessorKind_Command.TrimString()),
 		fmt.Errorf("%w %s", ErrNotAvailableEngines, ProcessorKind_Query.TrimString()),
 		fmt.Errorf("%w %s", ErrNotAvailableEngines, ProcessorKind_Actualizer.TrimString()),
+		fmt.Errorf("%w %s", ErrNotAvailableEngines, ProcessorKind_Scheduler.TrimString()),
 	}
 )
 
@@ -38,6 +39,10 @@ func errPartitionNotFound(name appdef.AppQName, partID istructs.PartitionID) err
 
 func errUndefinedExtension(n appdef.QName) error {
 	return fmt.Errorf("undefined extension %v: %w", n, ErrNotFound)
+}
+
+func errExtensionIncompatibleWithProcessor(ext appdef.IExtension, proc ProcessorKind) error {
+	return fmt.Errorf("extension %v is not compatible with processor %v", ext, proc.TrimString())
 }
 
 func errCantObtainFullQName(n appdef.QName) error {

@@ -127,26 +127,32 @@ func (f *implIFederation) httpRespToFuncResp(httpResp *coreutils.HTTPResponse, h
 		return nil, nil
 	}
 	if isUnexpectedCode {
+		funcError := coreutils.FuncError{
+			SysError: coreutils.SysError{
+				HTTPStatus: httpResp.HTTPResp.StatusCode,
+			},
+			ExpectedHTTPCodes: httpResp.ExpectedHTTPCodes(),
+		}
+		if len(httpResp.Body) == 0 || httpResp.HTTPResp.StatusCode == http.StatusOK {
+			return nil, funcError
+		}
 		m := map[string]interface{}{}
 		if err := json.Unmarshal([]byte(httpResp.Body), &m); err != nil {
 			return nil, err
 		}
-		if httpResp.HTTPResp.StatusCode == http.StatusOK {
-			return nil, coreutils.FuncError{
-				SysError: coreutils.SysError{
-					HTTPStatus: http.StatusOK,
-				},
-				ExpectedHTTPCodes: httpResp.ExpectedHTTPCodes(),
-			}
-		}
 		sysErrorMap := m["sys.Error"].(map[string]interface{})
-		return nil, coreutils.FuncError{
-			SysError: coreutils.SysError{
-				HTTPStatus: int(sysErrorMap["HTTPStatus"].(float64)),
-				Message:    sysErrorMap["Message"].(string),
-			},
-			ExpectedHTTPCodes: httpResp.ExpectedHTTPCodes(),
+		errQNameStr, ok := sysErrorMap["QName"].(string)
+		if ok {
+			errQName, err := appdef.ParseQName(errQNameStr)
+			if err != nil {
+				errQName = appdef.NewQName("<err>", sysErrorMap["QName"].(string))
+			}
+			funcError.SysError.QName = errQName
 		}
+		funcError.SysError.HTTPStatus = int(sysErrorMap["HTTPStatus"].(float64))
+		funcError.SysError.Message = sysErrorMap["Message"].(string)
+		funcError.SysError.Data, _ = sysErrorMap["Data"].(string)
+		return nil, funcError
 	}
 	res := &coreutils.FuncResponse{
 		HTTPResponse: httpResp,
@@ -203,14 +209,14 @@ func (f *implIFederation) N10NSubscribe(projectionKey in10n.ProjectionKey) (offs
 	go func() {
 		defer close(offsetsChan)
 		scanner := bufio.NewScanner(resp.HTTPResp.Body)
-		scanner.Split(coreutils.ScanSSE) // разбиваем на кадры sse, разделитель - два new line: "\n\n"
+		scanner.Split(coreutils.ScanSSE) // split by sse frames, separator is "\n\n"
 		for scanner.Scan() {
 			if resp.HTTPResp.Request.Context().Err() != nil {
 				return
 			}
-			messages := strings.Split(scanner.Text(), "\n") // делим кадр на событие и данные
+			messages := strings.Split(scanner.Text(), "\n") // split the frame by ecent and data
 			var event, data string
-			for _, str := range messages { // вычитываем
+			for _, str := range messages { // read out
 				if strings.HasPrefix(str, "event: ") {
 					event = strings.TrimPrefix(str, "event: ")
 				}

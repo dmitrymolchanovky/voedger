@@ -66,8 +66,9 @@ type BuiltInAppPackages struct {
 }
 type AppConfigsTypeEmpty istructsmem.AppConfigsType
 type BootstrapOperator pipeline.ISyncOperator
+type SidecarAppsDefs map[appdef.AppQName]BuiltInAppPackages
 
-type AppsArtefacts struct {
+type BuiltInAppsArtefacts struct {
 	istructsmem.AppConfigsType
 	builtInAppPackages []BuiltInAppPackages
 }
@@ -145,18 +146,22 @@ type VVMConfig struct {
 	MaxPrepareQueries          MaxPrepareQueriesType
 	StorageCacheSize           StorageCacheSizeType
 	processorsChannels         []ProcesorChannel
+	ActualizerStateOpts        []state.StateOptFunc
+	SecretsReader              isecrets.ISecretReader
+	SmtpConfig                 smtp.Cfg
+	WSPostInitFunc             workspace.WSPostInitFunc
+	DataPath                   string
+	MetricsServicePort         MetricsServicePortInitial
+
 	// 0 -> dynamic port will be used, new on each vvmIdx
 	// >0 -> vVMPort+vvmIdx will be actually used
-	VVMPort            VVMPortType
-	MetricsServicePort MetricsServicePortInitial
+	VVMPort VVMPortType
+
 	// test and FederationURL contains port -> the port will be relaced with the actual VVMPort
-	FederationURL       *url.URL
-	ActualizerStateOpts []state.StateOptFunc
-	SecretsReader       isecrets.ISecretReader
+	FederationURL *url.URL
+
 	// used in tests only
 	KeyspaceNameSuffix string
-	SmtpConfig         smtp.Cfg
-	WSPostInitFunc     workspace.WSPostInitFunc
 }
 
 type resultSenderErrorFirst struct {
@@ -170,3 +175,7 @@ type VoedgerVM struct {
 	vvmCtxCancel func()
 	vvmCleanup   func()
 }
+
+type ignition struct{}
+
+func (i ignition) Release() {}

@@ -27,6 +27,7 @@ import (
 	imetrics "github.com/voedger/voedger/pkg/metrics"
 	"github.com/voedger/voedger/pkg/parser"
 	"github.com/voedger/voedger/pkg/state/safestate"
+	"github.com/voedger/voedger/pkg/state/stateprovide"
 	"github.com/voedger/voedger/pkg/sys/authnz"
 
 	"github.com/voedger/voedger/pkg/istructs"
@@ -144,15 +145,15 @@ func Test_BasicUsage(t *testing.T) {
 	wlogOffsetFunc := func() istructs.Offset { return event.WLogOffset() }
 
 	// Create states for Command processor and Actualizer
-	actualizerState := state.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, eventFunc, nil, nil, intentsLimit, bundlesLimit)
-	cmdProcState := state.ProvideCommandProcessorStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, cudFunc, nil, nil, intentsLimit, nil, cmdPrepareArgsFunc, argFunc, unloggedArgFunc, wlogOffsetFunc)
+	actualizerState := stateprovide.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, eventFunc, nil, nil, intentsLimit, bundlesLimit)
+	cmdProcState := stateprovide.ProvideCommandProcessorStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, cudFunc, nil, nil, intentsLimit, nil, cmdPrepareArgsFunc, argFunc, unloggedArgFunc, wlogOffsetFunc)
 
 	// Create extension package from WASM
 	ctx := context.Background()
 	moduleUrl := testModuleURL("./_testdata/basicusage/pkg.wasm")
-	packages := []iextengine.ExtensionPackage{
+	packages := []iextengine.ExtensionModule{
 		{
-			QualifiedName:  testPkg,
+			Path:           testPkg,
 			ModuleUrl:      moduleUrl,
 			ExtensionNames: []string{calcOrderedItemsProjector.Entity(), newOrderCmd.Entity()},
 		},
@@ -245,9 +246,9 @@ func requireMemStatEx(t *testing.T, wasmEngine *wazeroExtEngine, mallocs, frees,
 }
 
 func testFactoryHelper(ctx context.Context, moduleUrl *url.URL, funcs []string, cfg iextengine.ExtEngineConfig, compile bool) (iextengine.IExtensionEngine, error) {
-	packages := []iextengine.ExtensionPackage{
+	packages := []iextengine.ExtensionModule{
 		{
-			QualifiedName:  testPkg,
+			Path:           testPkg,
 			ModuleUrl:      moduleUrl,
 			ExtensionNames: funcs,
 		},
@@ -418,7 +419,7 @@ func Test_HandlePanics(t *testing.T) {
 		{"incorrectValue", safestate.PanicIncorrectValue},
 		{"incorrectValue2", safestate.PanicIncorrectValue},
 		{"incorrectValue3", safestate.PanicIncorrectValue},
-		{"mustExist", state.ErrNotExists.Error()},
+		{"mustExist", stateprovide.ErrNotExists.Error()},
 		{"incorrectKeyBuilderOnNewValue", safestate.PanicIncorrectKeyBuilder},
 		{"incorrectKeyBuilderOnUpdateValue", safestate.PanicIncorrectKeyBuilder},
 		{"incorrectValueOnUpdateValue", safestate.PanicIncorrectValue},
@@ -454,7 +455,7 @@ func Test_QueryValue(t *testing.T) {
 
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{testQueryValue}, iextengine.ExtEngineConfig{MemoryLimitPages: 0x20}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -579,7 +580,7 @@ func Test_Read(t *testing.T) {
 	const testRead = "testRead"
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{testRead}, iextengine.ExtEngineConfig{}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -591,7 +592,7 @@ func Test_AsBytes(t *testing.T) {
 	const asBytes = "asBytes"
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{asBytes}, iextengine.ExtEngineConfig{}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -607,7 +608,7 @@ func Test_AsBytesOverflow(t *testing.T) {
 	const asBytes = "asBytes"
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{asBytes}, iextengine.ExtEngineConfig{MemoryLimitPages: 0x20}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -621,7 +622,7 @@ func Test_KeyPutQName(t *testing.T) {
 	const putQName = "keyPutQName"
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{putQName}, iextengine.ExtEngineConfig{}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -637,7 +638,7 @@ func Test_NoAllocs(t *testing.T) {
 	projectorMode = false
 	require := require.New(t)
 	ctx := context.Background()
-	moduleUrl := testModuleURL("./_testdata/tests/pkg.wasm")
+	moduleUrl := testModuleURL("./_testdata/tests/wasm/pkg.wasm")
 	extEngine, err := testFactoryHelper(ctx, moduleUrl, []string{testNoAllocs}, iextengine.ExtEngineConfig{MemoryLimitPages: 0x20}, false)
 	require.NoError(err)
 	defer extEngine.Close(ctx)
@@ -698,13 +699,13 @@ func Test_WithState(t *testing.T) {
 
 	// build app
 	appFunc := func() istructs.IAppStructs { return app }
-	state := state.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, nil, nil, nil, intentsLimit, bundlesLimit)
+	state := stateprovide.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, nil, nil, nil, intentsLimit, bundlesLimit)
 
 	// build packages
 	moduleUrl := testModuleURL("./_testdata/basicusage/pkg.wasm")
-	packages := []iextengine.ExtensionPackage{
+	packages := []iextengine.ExtensionModule{
 		{
-			QualifiedName:  testPkg,
+			Path:           testPkg,
 			ModuleUrl:      moduleUrl,
 			ExtensionNames: []string{extension},
 		},
@@ -770,7 +771,7 @@ func Test_StatePanic(t *testing.T) {
 			cfg.AddAsyncProjectors(istructs.Projector{Name: dummyProj})
 		})
 	appFunc := func() istructs.IAppStructs { return app }
-	state := state.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, nil, nil, nil, intentsLimit, bundlesLimit)
+	state := stateprovide.ProvideAsyncActualizerStateFactory()(context.Background(), appFunc, nil, state.SimpleWSIDFunc(ws), nil, nil, nil, nil, nil, intentsLimit, bundlesLimit)
 
 	const extname = "wrongFieldName"
 	const undefinedPackage = "undefinedPackage"
@@ -779,9 +780,9 @@ func Test_StatePanic(t *testing.T) {
 	ctx := context.Background()
 
 	moduleUrl := testModuleURL("./_testdata/panics/pkg.wasm")
-	packages := []iextengine.ExtensionPackage{
+	packages := []iextengine.ExtensionModule{
 		{
-			QualifiedName:  testPkg,
+			Path:           testPkg,
 			ModuleUrl:      moduleUrl,
 			ExtensionNames: []string{extname, undefinedPackage},
 		},

@@ -26,8 +26,8 @@ import (
 
 func newBuildCmd(params *vpmParams) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "build [-C] [-o <archive-name>]",
-		Short: "build",
+		Use:   "build",
+		Short: "build application .var file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			exists, err := checkPackageGenFileExists(params.Dir)
 			if err != nil {
@@ -47,8 +47,6 @@ func newBuildCmd(params *vpmParams) *cobra.Command {
 			return build(compileRes, params)
 		},
 	}
-	cmd.SilenceErrors = true
-	cmd.Flags().StringVarP(&params.Dir, "change-dir", "C", "", "Change to dir before running the command. Any files named on the command line are interpreted after changing directories. If used, this flag must be the first one in the command line.")
 	cmd.Flags().StringVarP(&params.Output, "output", "o", "", "output archive name")
 	return cmd
 }
@@ -159,7 +157,22 @@ func execTinyGoBuild(dir, appName string) (wasmFilePath string, err error) {
 	}
 
 	wasmFileName := appName + ".wasm"
-	if err := new(exec.PipedExec).Command("tinygo", "build", "--no-debug", "-o", wasmFileName, "-scheduler=none", "-opt=2", "-gc=leaking", "-target=wasi", ".").WorkingDir(dir).Run(stdout, os.Stderr); err != nil {
+	if err := new(exec.PipedExec).Command(
+		"tinygo",
+		"build",
+		"--no-debug",
+		"-o",
+		wasmFileName,
+		"-scheduler=none",
+		"-opt=2",
+		"-gc=leaking",
+		"-target=wasi",
+		".",
+	).WorkingDir(dir).Run(stdout, os.Stderr); err != nil {
+		// checking compatibility of the tinygo with go version
+		if strings.Contains(err.Error(), "requires go version") {
+			return "", fmt.Errorf("tinygo is incompatible with the current go version - %w", err)
+		}
 		return "", err
 	}
 	return filepath.Join(dir, wasmFileName), nil

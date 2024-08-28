@@ -21,6 +21,7 @@ classDiagram
         +Query(QName) IQuery
         +Role(QName) IRole
         +Projector(QName) IProjector
+        +Job(QName) IJob
         +Workspace(QName) IWorkspace
     }
     IAppDef "1" *--> "0..*" IType : compose
@@ -150,6 +151,8 @@ classDiagram
         <<interface>>
         +Name() string
         +Engine() ExtensionEngineKind
+        +States() IStorages
+        +Intents() IStorages
     }
 
     IExtension <|-- IFunction : inherits
@@ -176,12 +179,15 @@ classDiagram
     class IProjector {
         <<interface>>
         +Kind()* TypeKind_Projector
-        +Extension() IExtension
         +WantErrors() bool
         +Events() IProjectorEvents
+    }
+
+    IExtension <|-- IJob : inherits
+    class IJob {
+        <<interface>>
+        +Kind()* TypeKind_Job
         +CronSchedule() string
-        +States() IStorages
-        +Intents() IStorages
     }
 
     IWorkspace --|> IType : inherits
@@ -197,7 +203,7 @@ classDiagram
     class IRole {
         <<interface>>
         +Kind()* TypeKind_Role
-        +Privileges() []IPrivilege
+        +ACL() []IACLRule
     }
 ```
 
@@ -635,7 +641,6 @@ classDiagram
         +Kind()* TypeKind_Projector
         +WantErrors() bool
         +Events() IProjectorEvents
-        +CronSchedule() string
     }
 
     IProjector "1" *--> "1" IProjectorEvents : Events
@@ -665,6 +670,13 @@ classDiagram
         ExecuteWithParam
     }
 
+    IExtension <|-- IJob : inherits
+    class IJob {
+        <<interface>>
+        +Kind()* TypeKind_Job
+        +CronSchedule() string
+    }
+
     class IAppDef {
       …
       +Extensions() []IExtension
@@ -672,6 +684,7 @@ classDiagram
       +Commands() []ICommand
       +Queries() []IQuery
       +Projectors() []IProjector
+      +Jobs() []IJob
     }
 
     IAppDef "1" *--> "0..*" IExtension : Extensions
@@ -679,13 +692,14 @@ classDiagram
     IAppDef "1" *--> "0..*" ICommand : Commands
     IAppDef "1" *--> "0..*" IQuery : Queries
     IAppDef "1" *--> "0..*" IProjector : Projectors
+    IAppDef "1" *--> "0..*" IJob : Jobs
 ```
 
 *Rem*: In the above diagram the Param and Result of the function are `IType`, in future versions it will be changed to an array of `[]IParam` and renamed to plural (`Params`, `Results`).
 
 ### Workspaces
 
-### Roles and privileges
+### Roles and ACL
 
 ```mermaid
     classDiagram
@@ -693,24 +707,22 @@ classDiagram
     class IRole {
         <<interface>>
         +Kind()* TypeKind_Role
-        +Privileges() []IPrivilege
+        +ACL() []IACLRule
     }
 
-    IRole "1" *--> "1..*" IPrivilege : On
+    IRole "1" *--> "1..*" IACLRule : ACL
 
-    class IPrivilege {
+    class IACLRule {
         <<interface>>
         +Comment() []string
-        +Kinds() []PrivilegeKind
-        +IsGranted() bool
-        +IsRevoked() bool
-        +On() QNames
-        +Fields() []FieldName
+        +Ops() []OperationKind
+        +Policy() PolicyKind
+        +Resources() IResourcePattern
     }
 
-    IPrivilege "1" *--> "1..*" PrivilegeKind : Kinds
+    IACLRule "1" *--> "1..*" OperationKind : operations
     
-    class PrivilegeKind {
+    class OperationKind {
         <<enumeration>>
         Insert
         Update
@@ -719,17 +731,36 @@ classDiagram
         Inherits
     }
 
-    IPrivilege "1" *--> "1..*" QName : On
-    note for QName "types on which the privilege is granted or revoked"
+    IACLRule "1" *--> "1" PolicyKind : policy
+    
+    class PolicyKind {
+        <<enumeration>>
+        Allow
+        Deny
+    }
+
+    IACLRule "1" *--> "1" IResourcePattern : resources
+
+    class IResourcePattern {
+        <<interface>>
+        +On()[]QName
+        +Fields()[]FieldName
+    }
+
+    IResourcePattern "1" *--> "1..*" QName : On
+    IResourcePattern "1" *--> "0..*" FieldName : Fields
+
+    note for QName "names or patterns of resources"
+    note for FieldName "fields of records or view records for select and update operations"
 
     class IAppDef {
       …
       +Roles() []IRole
-      +Privileges() []IPrivilege
+      +ACL() []IACLRule
     }
 
     IAppDef "1" *--> "0..*" IRole : Roles
-    IAppDef "1" *--> "0..*" IPrivilege : all application privileges
+    IAppDef "1" *--> "0..*" IACLRule : application ACL
 ```
 
 ## Restrictions

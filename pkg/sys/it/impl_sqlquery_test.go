@@ -451,8 +451,9 @@ func TestSqlQuery(t *testing.T) {
 		require.NotEqual(t, len(wsOne.Sections[0].Elements), len(wsTwo.Sections[0].Elements))
 	})
 
-	t.Run("400 bad request on read from non-inited workspace", func(t *testing.T) {
-		vit.PostWS(ws, "q.sys.SqlQuery", `{"args":{"Query":"select * from 555.sys.wlog"}}`, coreutils.Expect400(processors.ErrWSNotInited.Message))
+	t.Run("403 forbidden on read from non-inited workspace", func(t *testing.T) {
+		vit.PostWS(ws, "q.sys.SqlQuery", fmt.Sprintf(`{"args":{"Query":"select * from %d.sys.wlog"}}`, istructs.NonExistingRecordID),
+			coreutils.Expect403(processors.ErrWSNotInited.Message))
 	})
 }
 
@@ -493,12 +494,12 @@ func TestReadFromAnDifferentLocations(t *testing.T) {
 		anotherAppWS := vit.CreateWorkspace(it.WSParams{
 			Name:         "anotherAppWS",
 			Kind:         qNameApp2_TestWSKind,
-			ClusterID:    istructs.MainClusterID,
+			ClusterID:    istructs.CurrentClusterID(),
 			InitDataJSON: `{"IntFld":42}`,
 		}, anotherAppWSOwner)
 
 		// in the another app use sql to query the record from the first app
-		body = fmt.Sprintf(`{"args":{"Query":"select * from test1.app1.%d.app1pkg.category where id = %d"},"elements":[{"fields":["Result"]}]}`, oneAppWS.WSID, categoryID)
+		body = fmt.Sprintf(`{"args":{"Query":"select * from test1.app1.%d.app1pkg.category.%d"},"elements":[{"fields":["Result"]}]}`, oneAppWS.WSID, categoryID)
 		resp := vit.PostWS(anotherAppWS, "q.sys.SqlQuery", body)
 		resStr := resp.SectionRow(len(resp.Sections[0].Elements) - 1)[0].(string)
 		require.Contains(resStr, fmt.Sprintf(`"name":"%s"`, categoryName))
@@ -509,7 +510,7 @@ func TestReadFromAnDifferentLocations(t *testing.T) {
 		registryAppStructs, err := vit.IAppStructsProvider.BuiltIn(istructs.AppQName_sys_registry)
 		require.NoError(err)
 		prn := vit.GetPrincipal(istructs.AppQName_test1_app1, "login") // from VIT shared config
-		pseudoWSID := coreutils.GetPseudoWSID(istructs.NullWSID, prn.Name, istructs.MainClusterID)
+		pseudoWSID := coreutils.GetPseudoWSID(istructs.NullWSID, prn.Name, istructs.CurrentClusterID())
 		appWSNumber := pseudoWSID.BaseWSID() % istructs.WSID(registryAppStructs.NumAppWorkspaces())
 
 		// for example read cdoc.registry.Login.LoginHash from the app workspace
@@ -528,5 +529,22 @@ func TestReadFromAnDifferentLocations(t *testing.T) {
 		resp := vit.PostWS(oneAppWS, "q.sys.SqlQuery", body)
 		loginHash := registry.GetLoginHash(prn.Login.Name)
 		require.Contains(resp.SectionRow()[0].(string), fmt.Sprintf(`"LoginHash":"%s"`, loginHash))
+	})
+
+	t.Run("query forwarding", func(t *testing.T) {
+		wsAnother := vit.WS(istructs.AppQName_test1_app1, "test_ws_another")
+		ws := vit.WS(istructs.AppQName_test1_app1, "test_ws")
+		body := fmt.Sprintf(`{"args":{"Query":"select * from %d.sys.wlog"},"elements":[{"fields":["Result"]}]}`, ws.WSID)
+		resp := vit.PostWS(wsAnother, "q.sys.SqlQuery", body)
+		require.GreaterOrEqual(resp.NumRows(), 2)
+		resp.Println()
+	})
+
+	t.Run("query forwarding with empty result", func(t *testing.T) {
+		wsAnother := vit.WS(istructs.AppQName_test1_app1, "test_ws_another")
+		ws := vit.WS(istructs.AppQName_test1_app1, "test_ws")
+		body := fmt.Sprintf(`{"args":{"Query":"select * from %d.sys.wlog where offset = %d"},"elements":[{"fields":["Result"]}]}`, ws.WSID, istructs.NonExistingRecordID)
+		resp := vit.PostWS(wsAnother, "q.sys.SqlQuery", body)
+		require.True(resp.IsEmpty())
 	})
 }

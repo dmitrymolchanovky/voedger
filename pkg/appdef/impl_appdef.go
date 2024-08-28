@@ -15,7 +15,7 @@ import (
 type appDef struct {
 	comment
 	packages     *packages
-	privileges   []*privilege // adding order should be saved
+	acl          []*aclRule // adding order should be saved
 	types        map[QName]interface{}
 	typesOrdered []interface{}
 	wsDesc       map[QName]IWorkspace
@@ -159,6 +159,21 @@ func (app *appDef) GRecords(cb func(IGRecord)) {
 	})
 }
 
+func (app *appDef) Job(name QName) IJob {
+	if t := app.typeByKind(name, TypeKind_Job); t != nil {
+		return t.(IJob)
+	}
+	return nil
+}
+
+func (app *appDef) Jobs(cb func(IJob)) {
+	app.Types(func(t IType) {
+		if j, ok := t.(IJob); ok {
+			cb(j)
+		}
+	})
+}
+
 func (app *appDef) Limit(name QName) ILimit {
 	if t := app.typeByKind(name, TypeKind_Limit); t != nil {
 		return t.(ILimit)
@@ -237,16 +252,16 @@ func (app *appDef) Packages(cb func(local, path string)) {
 	app.packages.forEach(cb)
 }
 
-func (app appDef) Privileges(cb func(IPrivilege)) {
-	for _, p := range app.privileges {
+func (app appDef) ACL(cb func(IACLRule)) {
+	for _, p := range app.acl {
 		cb(p)
 	}
 }
 
-func (app appDef) PrivilegesOn(n []QName, k ...PrivilegeKind) []IPrivilege {
-	pp := make([]IPrivilege, 0)
-	for _, p := range app.privileges {
-		if p.On().ContainsAny(n...) && p.kinds.ContainsAny(k...) {
+func (app appDef) ACLForResources(n []QName, k ...OperationKind) []IACLRule {
+	pp := make([]IACLRule, 0)
+	for _, p := range app.acl {
+		if p.Resources().On().ContainsAny(n...) && p.ops.ContainsAny(k...) {
 			pp = append(pp, p)
 		}
 	}
@@ -505,6 +520,11 @@ func (app *appDef) addGRecord(name QName) IGRecordBuilder {
 	return newGRecordBuilder(gRec)
 }
 
+func (app *appDef) addJob(name QName) IJobBuilder {
+	j := newJob(app, name)
+	return newJobBuilder(j)
+}
+
 func (app *appDef) addLimit(name QName, on []QName, rate QName, comment ...string) {
 	_ = newLimit(app, name, on, rate, comment...)
 }
@@ -567,8 +587,8 @@ func (app *appDef) addWorkspace(name QName) IWorkspaceBuilder {
 	return newWorkspaceBuilder(ws)
 }
 
-func (app *appDef) appendPrivilege(p *privilege) {
-	app.privileges = append(app.privileges, p)
+func (app *appDef) appendACL(p *aclRule) {
+	app.acl = append(app.acl, p)
 }
 
 func (app *appDef) appendType(t interface{}) {
@@ -592,20 +612,20 @@ func (app *appDef) build() (err error) {
 	return err
 }
 
-func (app *appDef) grant(kinds []PrivilegeKind, on []QName, fields []FieldName, toRole QName, comment ...string) {
+func (app *appDef) grant(ops []OperationKind, resources []QName, fields []FieldName, toRole QName, comment ...string) {
 	r := app.Role(toRole)
 	if r == nil {
 		panic(ErrRoleNotFound(toRole))
 	}
-	r.(*role).grant(kinds, on, fields, comment...)
+	r.(*role).grant(ops, resources, fields, comment...)
 }
 
-func (app *appDef) grantAll(on []QName, toRole QName, comment ...string) {
+func (app *appDef) grantAll(resources []QName, toRole QName, comment ...string) {
 	r := app.Role(toRole)
 	if r == nil {
 		panic(ErrRoleNotFound(toRole))
 	}
-	r.(*role).grantAll(on, comment...)
+	r.(*role).grantAll(resources, comment...)
 }
 
 // Makes system package.
@@ -623,20 +643,20 @@ func (app *appDef) makeSysDataTypes() {
 	}
 }
 
-func (app *appDef) revoke(kinds []PrivilegeKind, on []QName, fromRole QName, comment ...string) {
+func (app *appDef) revoke(ops []OperationKind, resources []QName, fromRole QName, comment ...string) {
 	r := app.Role(fromRole)
 	if r == nil {
 		panic(ErrRoleNotFound(fromRole))
 	}
-	r.(*role).revoke(kinds, on, comment...)
+	r.(*role).revoke(ops, resources, comment...)
 }
 
-func (app *appDef) revokeAll(on []QName, fromRole QName, comment ...string) {
+func (app *appDef) revokeAll(resources []QName, fromRole QName, comment ...string) {
 	r := app.Role(fromRole)
 	if r == nil {
 		panic(ErrRoleNotFound(fromRole))
 	}
-	r.(*role).revokeAll(on, comment...)
+	r.(*role).revokeAll(resources, comment...)
 }
 
 // Returns type by name and kind. If type is not found then returns nil.
@@ -677,6 +697,8 @@ func (ab *appDefBuilder) AddData(name QName, kind DataKind, ancestor QName, cons
 func (ab *appDefBuilder) AddGDoc(name QName) IGDocBuilder { return ab.app.addGDoc(name) }
 
 func (ab *appDefBuilder) AddGRecord(name QName) IGRecordBuilder { return ab.app.addGRecord(name) }
+
+func (ab *appDefBuilder) AddJob(name QName) IJobBuilder { return ab.app.addJob(name) }
 
 func (ab *appDefBuilder) AddLimit(name QName, on []QName, rate QName, comment ...string) {
 	ab.app.addLimit(name, on, rate, comment...)
@@ -736,13 +758,13 @@ func (ab *appDefBuilder) addHardcodedDefinitions() {
 	viewNextBaseWSID.Value().AddField("NextBaseWSID", DataKind_int64, true)
 }
 
-func (ab *appDefBuilder) Grant(kinds []PrivilegeKind, on []QName, fields []FieldName, toRole QName, comment ...string) IPrivilegesBuilder {
-	ab.app.grant(kinds, on, fields, toRole, comment...)
+func (ab *appDefBuilder) Grant(ops []OperationKind, resources []QName, fields []FieldName, toRole QName, comment ...string) IACLBuilder {
+	ab.app.grant(ops, resources, fields, toRole, comment...)
 	return ab
 }
 
-func (ab *appDefBuilder) GrantAll(on []QName, toRole QName, comment ...string) IPrivilegesBuilder {
-	ab.app.grantAll(on, toRole, comment...)
+func (ab *appDefBuilder) GrantAll(resources []QName, toRole QName, comment ...string) IACLBuilder {
+	ab.app.grantAll(resources, toRole, comment...)
 	return ab
 }
 
@@ -753,12 +775,12 @@ func (ab *appDefBuilder) MustBuild() IAppDef {
 	return ab.app
 }
 
-func (ab *appDefBuilder) Revoke(kinds []PrivilegeKind, on []QName, fromRole QName, comment ...string) IPrivilegesBuilder {
-	ab.app.revoke(kinds, on, fromRole, comment...)
+func (ab *appDefBuilder) Revoke(ops []OperationKind, resources []QName, fromRole QName, comment ...string) IACLBuilder {
+	ab.app.revoke(ops, resources, fromRole, comment...)
 	return ab
 }
 
-func (ab *appDefBuilder) RevokeAll(on []QName, fromRole QName, comment ...string) IPrivilegesBuilder {
-	ab.app.revokeAll(on, fromRole, comment...)
+func (ab *appDefBuilder) RevokeAll(resources []QName, fromRole QName, comment ...string) IACLBuilder {
+	ab.app.revokeAll(resources, fromRole, comment...)
 	return ab
 }

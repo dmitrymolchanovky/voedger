@@ -95,9 +95,14 @@ func ParseQuery(query string) (op Op, err error) {
 			return op, fmt.Errorf(`wrong dml operation kind "%s"`, operationStr)
 		}
 	}
+
 	if len(pars) > 0 || op.Kind == OpKind_Select {
 		op.CleanSQL = strings.TrimSpace(fmt.Sprintf("%s %s %s", opSQL, qNameStr, pars))
 	}
+	if op.EntityID > 0 {
+		qNameStr += "." + strconv.Itoa(int(op.EntityID))
+	}
+	op.VSQLWithoutAppAndWSID = strings.TrimSpace(fmt.Sprintf("%s %s %s", operationStr, qNameStr, pars))
 	return op, nil
 }
 
@@ -109,7 +114,7 @@ func parseWorkspace(workspaceStr string) (workspace Workspace, err error) {
 		workspace.Kind = WorkspaceKind_AppWSNum
 	case `"`:
 		login := workspaceStr[1 : len(workspaceStr)-1]
-		workspace.ID = uint64(coreutils.GetPseudoWSID(istructs.NullWSID, login, istructs.MainClusterID))
+		workspace.ID = uint64(coreutils.GetPseudoWSID(istructs.NullWSID, login, istructs.CurrentClusterID()))
 		workspace.Kind = WorkspaceKind_PseudoWSID
 	default:
 		workspace.ID, err = strconv.ParseUint(workspaceStr, 0, 0)

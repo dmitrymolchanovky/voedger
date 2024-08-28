@@ -37,22 +37,23 @@ func buildAppFromPackagesFS(fses []parser.PackageFS, adf appdef.IAppDefBuilder) 
 }
 
 func (ab VVMAppsBuilder) BuildAppsArtefacts(apis apps.APIs, emptyCfgs AppConfigsTypeEmpty,
-	appsEPs map[appdef.AppQName]extensionpoints.IExtensionPoint) (appsArtefacts AppsArtefacts, err error) {
-	appsArtefacts.AppConfigsType = istructsmem.AppConfigsType(emptyCfgs)
+	appsEPs map[appdef.AppQName]extensionpoints.IExtensionPoint) (builtinAppsArtefacts BuiltInAppsArtefacts, err error) {
+	builtinAppsArtefacts.AppConfigsType = istructsmem.AppConfigsType(emptyCfgs)
 	for appQName, appBuilder := range ab {
 		appEPs := appsEPs[appQName]
 		adb := appdef.New()
-		cfg := appsArtefacts.AppConfigsType.AddBuiltInAppConfig(appQName, adb)
+		cfg := builtinAppsArtefacts.AppConfigsType.AddBuiltInAppConfig(appQName, adb)
 		builtInAppDef := appBuilder(apis, cfg, appEPs)
 		cfg.SetNumAppWorkspaces(builtInAppDef.NumAppWorkspaces)
 		if err := buildAppFromPackagesFS(builtInAppDef.Packages, adb); err != nil {
-			return appsArtefacts, err
+			return builtinAppsArtefacts, err
 		}
+
 		// query IAppStructs to build IAppDef only once - on AppConfigType.prepare()
-		// это надо чтобы отловить ошибки IAppDefBuilder и проч
-		// также там нуже уже готовый IAppStorage чтобы вычитать QName->QNameID
+		// that need to catch errors from IAppDefBuilder etc here, not after VVM launch
+		// also we need ready-to-use IAppStorage to read a dictionary QName->QNameID
 		if _, err = apis.IAppStructsProvider.BuiltIn(appQName); err != nil {
-			return appsArtefacts, err
+			return builtinAppsArtefacts, err
 		}
 		builtInAppPackages := BuiltInAppPackages{
 			BuiltInApp: appparts.BuiltInApp{
@@ -62,7 +63,7 @@ func (ab VVMAppsBuilder) BuildAppsArtefacts(apis apps.APIs, emptyCfgs AppConfigs
 			},
 			Packages: builtInAppDef.Packages,
 		}
-		appsArtefacts.builtInAppPackages = append(appsArtefacts.builtInAppPackages, builtInAppPackages)
+		builtinAppsArtefacts.builtInAppPackages = append(builtinAppsArtefacts.builtInAppPackages, builtInAppPackages)
 	}
-	return appsArtefacts, nil
+	return builtinAppsArtefacts, nil
 }

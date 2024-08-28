@@ -22,26 +22,27 @@ type noRelease struct{}
 
 func (e noRelease) Release() {}
 
+type workpiece struct {
+	slots map[string]interface{}
+}
+
+func (w workpiece) Release() {
+}
+
 func TestBasicUsage_SyncPipeline(t *testing.T) {
 
-	// Конвейер состоит из операторов
-	// Заготовка перемещается от оператора к оператору
 	// Pipeline consists of few operators
 	// Workpieces go through the pipelines operators
 
 	// Sync pipeline can use any workpiece type, e.g.:
-	type workpiece struct {
-		slots map[string]interface{}
-	}
-
 	// Simplified operator as a function, sets name slot
-	funcOpSetName := func(_ context.Context, work interface{}) error {
+	funcOpSetName := func(_ context.Context, work IWorkpiece) error {
 		work.(workpiece).slots["name"] = "michael"
 		return nil
 	}
 
 	// Simplified operator as a function, sets age
-	funcOpSetAge := func(ctx context.Context, work interface{}) (err error) {
+	funcOpSetAge := func(ctx context.Context, work IWorkpiece) (err error) {
 		work.(workpiece).slots["age"] = "39"
 		return nil
 	}
@@ -189,7 +190,7 @@ func TestBasicUsage_AsyncSwitchOperator(t *testing.T) {
 
 func TestBasicUsage_ForkOperator(t *testing.T) {
 	operator := ForkOperator(
-		func(work interface{}, branchNumber int) (fork interface{}, err error) {
+		func(work IWorkpiece, branchNumber int) (fork IWorkpiece, err error) {
 			fork = newTestWork()
 			for k, v := range work.(testwork).slots {
 				fork.(testwork).slots[k] = v
@@ -232,12 +233,15 @@ func TestBasicUsage_ForkOperator(t *testing.T) {
 	})
 }
 
+type workPiece struct {
+	kind   string
+	text   string
+	number int
+}
+
+func (w *workPiece) Release() {}
+
 func TestBasicUsage_SwitchOperator(t *testing.T) {
-	type workPiece struct {
-		kind   string
-		text   string
-		number int
-	}
 	switchLogic := mockSwitch{
 		func(work interface{}) (branchName string, err error) {
 			switch work.(*workPiece).kind {

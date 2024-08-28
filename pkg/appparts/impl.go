@@ -8,6 +8,7 @@ package appparts
 import (
 	"context"
 	"errors"
+	"net/url"
 	"sync"
 	"time"
 
@@ -18,28 +19,45 @@ import (
 )
 
 type apps struct {
-	mx                    sync.RWMutex
-	structs               istructs.IAppStructsProvider
-	syncActualizerFactory SyncActualizerFactory
-	actualizers           IActualizers
-	extEngineFactories    iextengine.ExtensionEngineFactories
-	apps                  map[appdef.AppQName]*app
+	mx                     sync.RWMutex
+	vvmCtx                 context.Context
+	structs                istructs.IAppStructsProvider
+	syncActualizerFactory  SyncActualizerFactory
+	asyncActualizersRunner IActualizerRunner
+	schedulerRunner        ISchedulerRunner
+	extEngineFactories     iextengine.ExtensionEngineFactories
+	apps                   map[appdef.AppQName]*appRT
 }
 
-func newAppPartitions(asp istructs.IAppStructsProvider, saf SyncActualizerFactory, act IActualizers, eef iextengine.ExtensionEngineFactories) (ap IAppPartitions, cleanup func(), err error) {
+func newAppPartitions(
+	vvmCtx context.Context,
+	asp istructs.IAppStructsProvider,
+	saf SyncActualizerFactory,
+	asyncActualizersRunner IActualizerRunner,
+	jobSchedulerRunner ISchedulerRunner,
+	eef iextengine.ExtensionEngineFactories,
+) (ap IAppPartitions, cleanup func(), err error) {
 	a := &apps{
-		mx:                    sync.RWMutex{},
-		structs:               asp,
-		syncActualizerFactory: saf,
-		actualizers:           act,
-		extEngineFactories:    eef,
-		apps:                  map[appdef.AppQName]*app{},
+		mx:                     sync.RWMutex{},
+		vvmCtx:                 vvmCtx,
+		structs:                asp,
+		asyncActualizersRunner: asyncActualizersRunner,
+		schedulerRunner:        jobSchedulerRunner,
+		syncActualizerFactory:  saf,
+		extEngineFactories:     eef,
+		apps:                   map[appdef.AppQName]*appRT{},
 	}
-	act.SetAppPartitions(a)
+	a.asyncActualizersRunner.SetAppPartitions(a)
+	a.schedulerRunner.SetAppPartitions(a)
 	return a, func() {}, err
 }
 
-func (aps *apps) DeployApp(name appdef.AppQName, def appdef.IAppDef, partsCount istructs.NumAppPartitions, engines [ProcessorKind_Count]int) {
+func (aps *apps) DeployBuiltInApp(name appdef.AppQName, def appdef.IAppDef, partsCount istructs.NumAppPartitions, engines [ProcessorKind_Count]int) {
+	aps.DeployApp(name, nil, def, partsCount, engines, -1)
+}
+
+func (aps *apps) DeployApp(name appdef.AppQName, extModuleURLs map[string]*url.URL, def appdef.IAppDef,
+	partsCount istructs.NumAppPartitions, engines [ProcessorKind_Count]int, numAppWorkspaces istructs.NumAppWorkspaces) {
 	aps.mx.RLock()
 	_, ok := aps.apps[name]
 	aps.mx.RUnlock()
@@ -53,12 +71,19 @@ func (aps *apps) DeployApp(name appdef.AppQName, def appdef.IAppDef, partsCount 
 	aps.apps[name] = a
 	aps.mx.Unlock()
 
-	appStructs, err := aps.structs.BuiltIn(name)
+	var appStructs istructs.IAppStructs
+	var err error
+	if len(extModuleURLs) != 0 {
+		// TODO: is sidecarapp criteria?
+		appStructs, err = aps.structs.New(name, def, istructs.ClusterApps[name], numAppWorkspaces)
+	} else {
+		appStructs, err = aps.structs.BuiltIn(name)
+	}
 	if err != nil {
 		panic(err)
 	}
 
-	a.deploy(def, appStructs, engines)
+	a.deploy(def, extModuleURLs, appStructs, engines)
 }
 
 func (aps *apps) DeployAppPartitions(name appdef.AppQName, ids []istructs.PartitionID) {
@@ -70,24 +95,40 @@ func (aps *apps) DeployAppPartitions(name appdef.AppQName, ids []istructs.Partit
 		panic(errAppNotFound(name))
 	}
 
-	//TODO: parallelize
+	wg := sync.WaitGroup{}
 	for _, id := range ids {
-		p := newPartition(a, id)
+		var p *appPartitionRT
+
 		a.mx.Lock()
-		a.parts[id] = p
-		a.mx.Unlock()
-	}
-
-	var err error
-	for _, id := range ids {
-		if e := aps.actualizers.DeployPartition(name, id); e != nil {
-			err = errors.Join(err, e)
+		if exists, ok := a.parts[id]; ok {
+			p = exists
+		} else {
+			p = newAppPartitionRT(a, id)
+			a.parts[id] = p
 		}
-	}
+		a.mx.Unlock()
 
-	if err != nil {
-		panic(err)
+		wg.Add(1)
+		go func(p *appPartitionRT) {
+			p.actualizers.Deploy(
+				aps.vvmCtx,
+				a.lastestVersion.appDef(),
+				aps.asyncActualizersRunner.NewAndRun,
+			)
+			wg.Done()
+		}(p)
+
+		wg.Add(1)
+		go func(p *appPartitionRT) {
+			p.schedulers.Deploy(
+				aps.vvmCtx,
+				a.lastestVersion.appDef(),
+				aps.schedulerRunner.NewAndRun,
+			)
+			wg.Done()
+		}(p)
 	}
+	wg.Wait()
 }
 
 func (aps *apps) AppDef(name appdef.AppQName) (appdef.IAppDef, error) {
@@ -98,7 +139,7 @@ func (aps *apps) AppDef(name appdef.AppQName) (appdef.IAppDef, error) {
 	if !ok {
 		return nil, errAppNotFound(name)
 	}
-	return app.def, nil
+	return app.lastestVersion.appDef(), nil
 }
 
 // Returns _total_ application partitions count.
