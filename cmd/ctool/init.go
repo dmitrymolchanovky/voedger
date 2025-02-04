@@ -13,16 +13,16 @@ import (
 )
 
 var (
-	initCECmd, initSECmd *cobra.Command
+	initN1Cmd, initSECmd *cobra.Command
 )
 var skipStacks []string
 
 func newInitCmd() *cobra.Command {
-	initCECmd = &cobra.Command{
-		Use:   "CE [<ipaddr>...]",
-		Short: "Create the cluster.json file for the CE edition cluster",
+	initN1Cmd = &cobra.Command{
+		Use:   "n1 [<ipaddr>...]",
+		Short: "Deploy the N1 cluster",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  initCE,
+		RunE:  initN1,
 	}
 
 	initSECmd = &cobra.Command{
@@ -45,14 +45,14 @@ func newInitCmd() *cobra.Command {
 
 	initCmd := &cobra.Command{
 		Use:   "init",
-		Short: "Creates the file cluster.json for cluster",
+		Short: "Deploy cluster",
 	}
 
 	initCmd.PersistentFlags().StringVar(&acmeDomains, "acme-domain", "", "ACME domains <comma separated list>")
 
 	initCmd.PersistentFlags().StringVarP(&sshPort, "ssh-port", "p", "22", "SSH port")
 
-	initCmd.AddCommand(initCECmd, initSECmd)
+	initCmd.AddCommand(initN1Cmd, initSECmd)
 
 	return initCmd
 
@@ -92,7 +92,7 @@ func parseDeployArgs(args []string) error {
 }
 
 // nolint
-func initCE(cmd *cobra.Command, args []string) error {
+func initN1(cmd *cobra.Command, args []string) error {
 
 	currentCmd = cmd
 	cluster := newCluster()
@@ -104,7 +104,7 @@ func initCE(cmd *cobra.Command, args []string) error {
 		return ErrClusterConfAlreadyExists
 	}
 
-	c := newCmd(ckInit, append([]string{"CE"}, args...))
+	c := newCmd(ckInit, append([]string{"N1"}, args...))
 	if err = cluster.applyCmd(c); err != nil {
 		loggerError(err.Error())
 		return err

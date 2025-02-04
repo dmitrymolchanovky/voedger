@@ -202,8 +202,8 @@ func (n *nodeType) nodeName() string {
 			}
 		}
 
-	} else if n.cluster.Edition == clusterEditionCE {
-		return ceNodeName
+	} else if n.cluster.Edition == clusterEditionN1 {
+		return n1NodeName
 	} else {
 		return "node"
 	}
@@ -250,7 +250,7 @@ func (n *nodeType) nodeControllerFunction() error {
 	switch n.NodeRole {
 	case nrDBNode, nrAppNode, nrAppDbNode:
 		return seNodeControllerFunction(n)
-	case nrCENode:
+	case nrN1Node:
 		return ceNodeControllerFunction(n)
 	default:
 		return ErrNodeControllerFunctionNotAssigned
@@ -292,7 +292,7 @@ func (n *nodeType) actualNodeVersion() string {
 // nolint
 func (n *nodeType) label(key string) []string {
 	switch n.NodeRole {
-	case nrCENode:
+	case nrN1Node:
 		return []string{"ce"}
 	case nrAppNode:
 		if key != swarmAppLabelKey {
@@ -427,10 +427,10 @@ func validateInitCmd(cmd *cmdType, _ *clusterType) error {
 		return ErrMissingCommandArguments
 	}
 
-	if cmd.Args[0] != clusterEditionCE && cmd.Args[0] != clusterEditionSE {
+	if cmd.Args[0] != clusterEditionN1 && cmd.Args[0] != clusterEditionSE {
 		return ErrInvalidClusterEdition
 	}
-	if cmd.Args[0] == clusterEditionCE && len(cmd.Args) != 1+initCeArgCount {
+	if cmd.Args[0] == clusterEditionN1 && len(cmd.Args) != 1+initCeArgCount {
 		return ErrInvalidNumberOfArguments
 	}
 
@@ -640,7 +640,7 @@ func (c *clusterType) clusterControllerFunction() error {
 	}
 
 	switch c.Edition {
-	case clusterEditionCE:
+	case clusterEditionN1:
 		return ceClusterControllerFunction(c)
 	case clusterEditionSE:
 		return seClusterControllerFunction(c)
@@ -862,6 +862,21 @@ func (c *clusterType) loadFromJSON() error {
 		err = c.setEnv()
 	}
 
+	// Compatibility of versions 0.0.6 (and younger) with version 0.0.7 (and older) (CE, SE3, SE5 -> n1, n3, n5)
+	switch c.Edition {
+	case clusterEditionCE:
+		c.Edition = clusterEditionN1
+		c.Nodes[0].NodeRole = nrN1Node
+	case clusterEditionSE:
+		if c.SubEdition == clusterSubEditionSE3 {
+			c.Edition = clusterEditionN3
+			c.SubEdition = ""
+		} else {
+			c.Edition = clusterEditionN5
+			c.SubEdition = ""
+		}
+	}
+
 	return err
 }
 
@@ -902,7 +917,7 @@ func (c *clusterType) setEnv() error {
 
 	}
 
-	if c.Edition == clusterEditionCE && len(c.Nodes) == 1 {
+	if /*c.Edition == clusterEditionN1 &&*/ len(c.Nodes) == 1 {
 		var port string
 
 		if c.Acme != nil && c.Acme.domains() != "" {
@@ -933,10 +948,10 @@ func (c *clusterType) readFromInitArgs(cmd *cobra.Command, args []string) error 
 	// nolint
 	defer saveClusterToJson(c)
 
-	if cmd == initCECmd { // CE args
-		c.Edition = clusterEditionCE
+	if cmd == initN1Cmd { // CE args
+		c.Edition = clusterEditionN1
 		c.Nodes = make([]nodeType, 1)
-		c.Nodes[0].NodeRole = nrCENode
+		c.Nodes[0].NodeRole = nrN1Node
 		c.Nodes[0].cluster = c
 		c.Nodes[0].DesiredNodeState = newNodeState("", c.DesiredClusterVersion)
 		c.Nodes[0].ActualNodeState = newNodeState("", "")
@@ -1007,7 +1022,7 @@ func (c *clusterType) validate() error {
 		}
 	}
 
-	if c.Edition != clusterEditionCE && c.Edition != clusterEditionSE {
+	if c.Edition != clusterEditionN1 && c.Edition != clusterEditionSE {
 		err = errors.Join(err, ErrInvalidClusterEdition)
 	}
 

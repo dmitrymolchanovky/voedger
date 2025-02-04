@@ -769,7 +769,7 @@ func setCronBackup(cluster *clusterType, backupTime string) error {
 
 	loggerInfo("Setting a cron schedule for database backup ", backupTime)
 
-	if cluster.Edition == clusterEditionCE {
+	if cluster.Edition == clusterEditionN1 {
 		args := []string{backupTime}
 		if cluster.Cron.ExpireTime != "" {
 			args = append(args, cluster.Cron.ExpireTime)
