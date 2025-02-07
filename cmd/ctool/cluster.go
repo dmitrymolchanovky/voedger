@@ -181,7 +181,7 @@ func (n *nodeType) address() string {
 
 // nolint
 func (n *nodeType) nodeName() string {
-	if n.cluster.Edition == clusterEditionSE {
+	if n.cluster.Edition == clusterEditionN5 {
 		if n.cluster.SubEdition == clusterSubEditionSE3 {
 			return fmt.Sprintf("node-%d", n.idx)
 		} else {
@@ -427,7 +427,7 @@ func validateInitCmd(cmd *cmdType, _ *clusterType) error {
 		return ErrMissingCommandArguments
 	}
 
-	if cmd.Args[0] != clusterEditionN1 && cmd.Args[0] != clusterEditionSE {
+	if cmd.Args[0] != clusterEditionN1 && cmd.Args[0] != clusterEditionN5 {
 		return ErrInvalidClusterEdition
 	}
 	if cmd.Args[0] == clusterEditionN1 && len(cmd.Args) != 1+initCeArgCount {
@@ -642,7 +642,7 @@ func (c *clusterType) clusterControllerFunction() error {
 	switch c.Edition {
 	case clusterEditionN1:
 		return ceClusterControllerFunction(c)
-	case clusterEditionSE:
+	case clusterEditionN5:
 		return seClusterControllerFunction(c)
 	default:
 		return ErrClusterControllerFunctionNotAssigned
@@ -869,8 +869,7 @@ func (c *clusterType) loadFromJSON() error {
 		c.Nodes[0].NodeRole = nrN1Node
 	case clusterEditionSE:
 		if c.SubEdition == clusterSubEditionSE3 {
-			c.Edition = clusterEditionN3
-			c.SubEdition = ""
+			err = fmt.Errorf("the configuration of the SE3 cluster is not supported. You must use ctool version 0.0.6.")
 		} else {
 			c.Edition = clusterEditionN5
 			c.SubEdition = ""
@@ -902,19 +901,11 @@ func (c *clusterType) setEnv() error {
 		}
 	}
 
-	if c.Edition == clusterEditionSE {
-		if c.SubEdition == clusterSubEditionSE5 {
-			logger.Verbose(fmt.Sprintf(setEnv, envVoedgerEdition, clusterSubEditionSE5))
-			if err := os.Setenv(envVoedgerEdition, clusterSubEditionSE5); err != nil {
-				return err
-			}
-		} else if c.SubEdition == clusterSubEditionSE3 {
-			logger.Verbose(fmt.Sprintf(setEnv, envVoedgerEdition, clusterSubEditionSE3))
-			if err := os.Setenv(envVoedgerEdition, clusterSubEditionSE3); err != nil {
-				return err
-			}
+	if c.Edition == clusterEditionN5 {
+		logger.Verbose(fmt.Sprintf(setEnv, envVoedgerEdition, clusterSubEditionSE5))
+		if err := os.Setenv(envVoedgerEdition, clusterSubEditionSE5); err != nil {
+			return err
 		}
-
 	}
 
 	if /*c.Edition == clusterEditionN1 &&*/ len(c.Nodes) == 1 {
@@ -970,8 +961,8 @@ func (c *clusterType) readFromInitArgs(cmd *cobra.Command, args []string) error 
 
 		if len(args) == se5NodeCount {
 
-			c.Edition = clusterEditionSE
-			c.SubEdition = clusterSubEditionSE5
+			c.Edition = clusterEditionN5
+			c.SubEdition = ""
 			c.Nodes = make([]nodeType, se5NodeCount)
 
 			for i := 0; i < se5NodeCount; i++ {
@@ -984,24 +975,8 @@ func (c *clusterType) readFromInitArgs(cmd *cobra.Command, args []string) error 
 				c.Nodes[i].ActualNodeState = newNodeState("", "")
 				c.Nodes[i].cluster = c
 			}
-		} else if len(args) == se3NodeCount {
-			c.Edition = clusterEditionSE
-			c.SubEdition = clusterSubEditionSE3
-			c.Nodes = make([]nodeType, se3NodeCount)
-
-			for i := 0; i < se3NodeCount; i++ {
-				if i < seNodeCount {
-					c.Nodes[i].NodeRole = nrAppDbNode
-				} else {
-					c.Nodes[i].NodeRole = nrDBNode
-				}
-				c.Nodes[i].DesiredNodeState = newNodeState(args[i], c.DesiredClusterVersion)
-				c.Nodes[i].ActualNodeState = newNodeState("", "")
-				c.Nodes[i].cluster = c
-			}
 		} else {
 			return ErrInvalidNumberOfArguments
-
 		}
 
 	}
@@ -1022,7 +997,7 @@ func (c *clusterType) validate() error {
 		}
 	}
 
-	if c.Edition != clusterEditionN1 && c.Edition != clusterEditionSE {
+	if c.Edition != clusterEditionN1 && c.Edition != clusterEditionN5 {
 		err = errors.Join(err, ErrInvalidClusterEdition)
 	}
 
